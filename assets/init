@@ -305,15 +305,6 @@ case "${LDAP_UID}" in
   *) LDAP_ALLOW_USERNAME_OR_EMAIL_LOGIN=${LDAP_ALLOW_USERNAME_OR_EMAIL_LOGIN:-true}
 esac
 
-if [ ! -e ${GITLAB_DATA_DIR}/ssh/ssh_host_rsa_key ]; then
-  # create ssh host keys and move them to the data store.
-  dpkg-reconfigure openssh-server
-  mkdir -p ${GITLAB_DATA_DIR}/ssh/
-  mv /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub ${GITLAB_DATA_DIR}/ssh/
-fi
-# configure sshd to pick up the host keys from ${GITLAB_DATA_DIR}/ssh/
-sed -i 's,HostKey /etc/ssh/,HostKey '"${GITLAB_DATA_DIR}"'/ssh/,g' -i /etc/ssh/sshd_config
-
 # populate ${GITLAB_LOG_DIR}
 mkdir -m 0755 -p ${GITLAB_LOG_DIR}/supervisor   && chown -R root:root ${GITLAB_LOG_DIR}/supervisor
 mkdir -m 0755 -p ${GITLAB_LOG_DIR}/nginx        && chown -R git:git ${GITLAB_LOG_DIR}/nginx
@@ -683,11 +674,11 @@ chmod -R u+rwX ${GITLAB_DATA_DIR}/uploads/
 chown git:git ${GITLAB_DATA_DIR}/uploads/
 
 # create the .ssh directory
-sudo -u git -H mkdir -p ${GITLAB_DATA_DIR}/.ssh/
-touch ${GITLAB_DATA_DIR}/.ssh/authorized_keys
-chmod 700 ${GITLAB_DATA_DIR}/.ssh
-chmod 600 ${GITLAB_DATA_DIR}/.ssh/authorized_keys
-chown -R git:git ${GITLAB_DATA_DIR}/.ssh
+sudo -u git -H mkdir -p ${GITLAB_DATA_DIR}/ssh/
+touch ${GITLAB_DATA_DIR}/ssh/authorized_keys
+chmod 711 ${GITLAB_DATA_DIR}/ssh
+chmod 644 ${GITLAB_DATA_DIR}/ssh/authorized_keys
+chown -R git:git ${GITLAB_DATA_DIR}/ssh
 
 appInit () {
   # due to the nature of docker and its use cases, we allow some time
