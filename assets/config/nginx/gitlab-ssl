@@ -33,7 +33,7 @@
 ## See installation.md#using-https for additional HTTPS configuration details.
 
 upstream gitlab {
-  server unix:{{GITLAB_INSTALL_DIR}}/tmp/sockets/gitlab.socket fail_timeout=0;
+  server {{UPSTREAM_HOST}}:{{UPSTREAM_PORT}} fail_timeout=0;
 }
 
 ## Redirects all HTTP traffic to the HTTPS host
