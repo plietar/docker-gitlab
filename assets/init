@@ -128,6 +128,14 @@ GOOGLE_ANALYTICS_ID=${GOOGLE_ANALYTICS_ID:-}
 PIWIK_URL=${PIWIK_URL:-}
 PIWIK_SITE_ID=${PIWIK_SITE_ID:-}
 
+UPSTREAM_HOST=${UPSTREAM_HOST:-localhost}
+UPSTREAM_PORT=${UPSTREAM_PORT:-8080}
+
+if [ -n "${UNICORN_PORT_8080_TCP_ADDR}" ]; then
+  UPSTREAM_HOST=${UNICORN_PORT_8080_TCP_ADDR}
+  UPSTREAM_PORT=${UNICORN_PORT_8080_TCP_PORT}
+fi
+
 # is a mysql or postgresql database linked?
 # requires that the mysql or postgresql containers have exposed
 # port 3306 and 5432 respectively.
@@ -451,6 +459,8 @@ sudo -u git -H sed 's,{{GITLAB_BACKUP_DIR}},'"${GITLAB_BACKUP_DIR}"',g' -i ${GIT
 sudo -u git -H sed 's/{{SSL_SELF_SIGNED}}/'"${SSL_SELF_SIGNED}"'/' -i ${GITLAB_SHELL_INSTALL_DIR}/config.yml
 sudo -u git -H sed 's/{{REDIS_HOST}}/'"${REDIS_HOST}"'/' -i ${GITLAB_SHELL_INSTALL_DIR}/config.yml
 sudo -u git -H sed 's/{{REDIS_PORT}}/'"${REDIS_PORT}"'/' -i ${GITLAB_SHELL_INSTALL_DIR}/config.yml
+sudo -u git -H sed 's/{{UPSTREAM_HOST}}/'"${UPSTREAM_HOST}"'/' -i ${GITLAB_SHELL_INSTALL_DIR}/config.yml
+sudo -u git -H sed 's/{{UPSTREAM_PORT}}/'"${UPSTREAM_PORT}"'/' -i ${GITLAB_SHELL_INSTALL_DIR}/config.yml
 
 # configure unicorn workers
 sudo -u git -H sed 's,{{GITLAB_INSTALL_DIR}},'"${GITLAB_INSTALL_DIR}"',g' -i config/unicorn.rb
@@ -786,6 +796,15 @@ appStart () {
   exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
 }
 
+appShell() {
+  E=()
+  [[ -v SSH_CONNECTION ]] && E+=(SSH_CONNECTION="$SSH_CONNECTION")
+  [[ -v SSH_ORIGINAL_COMMAND ]] && E+=(SSH_ORIGINAL_COMMAND="$SSH_ORIGINAL_COMMAND")
+  [[ -v SSH_CLIENT ]] && E+=(SSH_CLIENT="$SSH_CLIENT")
+
+  exec sudo -u git -i -H "${E[@]}" bash "$@"
+}
+
 appSanitize () {
   echo "Checking repository directories permissions..."
   chmod -R ug+rwX,o-rwx ${GITLAB_DATA_DIR}/repositories/
@@ -856,6 +875,7 @@ appHelp () {
   echo "Available options:"
   echo " app:start          - Starts the gitlab server (default)"
   echo " app:init           - Initialize the gitlab server (e.g. create databases, compile assets), but don't start it."
+  echo " app:shell          - Runs gitlab-shell"
   echo " app:sanitize       - Fix repository/satellites directory permissions."
   echo " app:rake <task>    - Execute a rake task."
   echo " app:help           - Displays the help"
@@ -868,6 +888,9 @@ case "$1" in
     ;;
   app:init)
     appInit
+  app:shell)
+    shift 1
+    appShell "$@"
     ;;
   app:sanitize)
     appSanitize
