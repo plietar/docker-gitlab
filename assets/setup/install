@@ -83,6 +83,10 @@ sudo -u git -H bundle install -j$(nproc) --deployment --without development test
 # install gitlab-shell
 sudo -u git -H bundle exec rake gitlab:shell:install[v${GITLAB_SHELL_VERSION}] REDIS_URL=unix:/var/run/redis/redis.sock RAILS_ENV=production
 
+rm -f ${GITLAB_INSTALL_DIR}/.gitlab_shell_secret ${GITLAB_SHELL_INSTALL_DIR}/.gitlab_shell_secret
+sudo -u git -H ln -s ${GITLAB_DATA_DIR}/gitlab_shell_secret ${GITLAB_INSTALL_DIR}/.gitlab_shell_secret
+sudo -u git -H ln -s ${GITLAB_DATA_DIR}/gitlab_shell_secret ${GITLAB_SHELL_INSTALL_DIR}/.gitlab_shell_secret
+
 # make sure everything in /home/git is owned by the git user
 chown -R git:git /home/git/
 
