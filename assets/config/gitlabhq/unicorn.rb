@@ -32,7 +32,6 @@ working_directory "{{GITLAB_INSTALL_DIR}}" # available in 0.94.0+
 # Listen on both a Unix domain socket and a TCP port.
 # If you are load-balancing multiple Unicorn masters, lower the backlog
 # setting to e.g. 64 for faster failover.
-listen "{{GITLAB_INSTALL_DIR}}/tmp/sockets/gitlab.socket", :backlog => 1024
 listen "0.0.0.0:8080", :tcp_nopush => true
 
 # nuke workers after 30 seconds instead of 60 seconds (the default)
@@ -51,15 +50,6 @@ listen "0.0.0.0:8080", :tcp_nopush => true
 # For more information see http://stackoverflow.com/a/21682112/752049
 #
 timeout {{UNICORN_TIMEOUT}}
-
-# feel free to point this anywhere accessible on the filesystem
-pid "{{GITLAB_INSTALL_DIR}}/tmp/pids/unicorn.pid"
-
-# By default, the Unicorn logger will write to stderr.
-# Additionally, some applications/frameworks log to stderr or stdout,
-# so prevent them from going to /dev/null when daemonized here:
-stderr_path "{{GITLAB_INSTALL_DIR}}/log/unicorn.stderr.log"
-stdout_path "{{GITLAB_INSTALL_DIR}}/log/unicorn.stdout.log"
 
 # combine Ruby 2.0.0dev or REE with "preload_app true" for memory savings
 # http://rubyenterpriseedition.com/faq.html#adapt_apps_for_cow
@@ -80,30 +70,6 @@ before_fork do |server, worker|
   # as there's no need for the master process to hold a connection
   defined?(ActiveRecord::Base) and
     ActiveRecord::Base.connection.disconnect!
-
-  # The following is only recommended for memory/DB-constrained
-  # installations.  It is not needed if your system can house
-  # twice as many worker_processes as you have configured.
-  #
-  # This allows a new master process to incrementally
-  # phase out the old master process with SIGTTOU to avoid a
-  # thundering herd (especially in the "preload_app false" case)
-  # when doing a transparent upgrade.  The last worker spawned
-  # will then kill off the old master process with a SIGQUIT.
-  old_pid = "#{server.config[:pid]}.oldbin"
-  if old_pid != server.pid
-    begin
-      sig = (worker.nr + 1) >= server.worker_processes ? :QUIT : :TTOU
-      Process.kill(sig, File.read(old_pid).to_i)
-    rescue Errno::ENOENT, Errno::ESRCH
-    end
-  end
-  #
-  # Throttle the master from forking too quickly by sleeping.  Due
-  # to the implementation of standard Unix signal handlers, this
-  # helps (but does not completely) prevent identical, repeated signals
-  # from being lost when the receiving process is busy.
-  # sleep 1
 end
 
 after_fork do |server, worker|

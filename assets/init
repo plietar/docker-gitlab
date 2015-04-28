@@ -751,13 +751,6 @@ appInit () {
 appStartUnicorn() {
   appInit
 
-  # remove stale unicorn and sidekiq pid's if they exist.
-  rm -rf tmp/pids/unicorn.pid
-  rm -rf tmp/pids/sidekiq.pid
-
-  # remove stale unicorn socket if it exists
-  rm -rf tmp/sockets/gitlab.socket
-
   exec sudo -u git -H bundle exec unicorn_rails -c ${GITLAB_INSTALL_DIR}/config/unicorn.rb -E production
 }
 
@@ -776,9 +769,7 @@ appStartSidekiq() {
     -q gitlab_shell \
     -q common \
     -q default \
-    -e production \
-    -P ${GITLAB_INSTALL_DIR}/tmp/pids/sidekiq.pid \
-    -L ${GITLAB_INSTALL_DIR}/log/sidekiq.log
+    -e production
 }
 
 appShell() {
