@@ -41,10 +41,6 @@ SSL_VERIFY_CLIENT=${SSL_VERIFY_CLIENT:-off}
 
 CA_CERTIFICATES_PATH=${CA_CERTIFICATES_PATH:-$GITLAB_DATA_DIR/certs/ca.crt}
 
-GITLAB_BACKUPS=${GITLAB_BACKUPS:-disable}
-GITLAB_BACKUP_TIME=${GITLAB_BACKUP_TIME:-04:00}
-GITLAB_BACKUP_EXPIRY=${GITLAB_BACKUP_EXPIRY:-}
-
 NGINX_WORKERS=${NGINX_WORKERS:-1}
 NGINX_ACCEL_BUFFERING=${NGINX_ACCEL_BUFFERING:-no}
 NGINX_PROXY_BUFFERING=${NGINX_PROXY_BUFFERING:-off}
@@ -303,11 +299,6 @@ case "${GITLAB_HTTPS}" in
     ;;
 esac
 
-case "${GITLAB_BACKUPS}" in
-  daily|weekly|monthly) GITLAB_BACKUP_EXPIRY=${GITLAB_BACKUP_EXPIRY:-604800} ;;
-  disable|*) GITLAB_BACKUP_EXPIRY=${GITLAB_BACKUP_EXPIRY:-0} ;;
-esac
-
 case "${LDAP_UID}" in
   userPrincipalName) LDAP_ALLOW_USERNAME_OR_EMAIL_LOGIN=${LDAP_ALLOW_USERNAME_OR_EMAIL_LOGIN:-false} ;;
   *) LDAP_ALLOW_USERNAME_OR_EMAIL_LOGIN=${LDAP_ALLOW_USERNAME_OR_EMAIL_LOGIN:-true}
@@ -388,7 +379,6 @@ sudo -u git -H sed 's/{{GITLAB_HTTPS}}/'"${GITLAB_HTTPS}"'/' -i config/gitlab.ym
 sudo -u git -H sed 's/{{GITLAB_EMAIL}}/'"${GITLAB_EMAIL}"'/' -i config/gitlab.yml
 sudo -u git -H sed 's/{{GITLAB_EMAIL_DISPLAY_NAME}}/'"${GITLAB_EMAIL_DISPLAY_NAME}"'/' -i config/gitlab.yml
 sudo -u git -H sed 's/{{GITLAB_EMAIL_REPLY_TO}}/'"${GITLAB_EMAIL_REPLY_TO}"'/' -i config/gitlab.yml
-sudo -u git -H sed 's/{{GITLAB_BACKUP_EXPIRY}}/'"${GITLAB_BACKUP_EXPIRY}"'/' -i config/gitlab.yml
 sudo -u git -H sed 's/{{GITLAB_MAX_SIZE}}/'"${GITLAB_MAX_SIZE}"'/' -i config/gitlab.yml
 sudo -u git -H sed 's/{{GITLAB_SSH_HOST}}/'"${GITLAB_SSH_HOST}"'/' -i config/gitlab.yml
 sudo -u git -H sed 's/{{GITLAB_SSH_PORT}}/'"${GITLAB_SSH_PORT}"'/' -i config/gitlab.yml
@@ -776,33 +766,6 @@ appStartNginx() {
   exec /usr/sbin/nginx -g "daemon off;"
 }
 
-appStartCron() {
-  if [ "${GITLAB_BACKUPS}" != "disable" ]; then
-    # setup cron job for automatic backups
-    read hour min <<< ${GITLAB_BACKUP_TIME//[:]/ }
-    case "${GITLAB_BACKUPS}" in
-      daily)
-        sudo -u git -H cat > /tmp/cron.git <<EOF
-$min $hour * * * cd ${GITLAB_INSTALL_DIR} && PATH=/usr/local/bin:/usr/bin:/bin bundle exec rake gitlab:backup:create RAILS_ENV=production
-EOF
-        ;;
-      weekly)
-        sudo -u git -H cat > /tmp/cron.git <<EOF
-$min $hour * * 0 cd ${GITLAB_INSTALL_DIR} && PATH=/usr/local/bin:/usr/bin:/bin bundle exec rake gitlab:backup:create RAILS_ENV=production
-EOF
-        ;;
-      monthly)
-        sudo -u git -H cat > /tmp/cron.git <<EOF
-$min $hour 01 * * cd ${GITLAB_INSTALL_DIR} && PATH=/usr/local/bin:/usr/bin:/bin bundle exec rake gitlab:backup:create RAILS_ENV=production
-EOF
-        ;;
-    esac
-    crontab -u git /tmp/cron.git && rm -rf /tmp/cron.git
-  fi
-
-  exec /usr/sbin/cron -f
-}
-
 appStartSidekiq() {
   exec sudo -u git -H bundle exec sidekiq \
     -c ${SIDEKIQ_CONCURRENCY} \
@@ -856,41 +819,8 @@ appRake () {
 
   echo "Running gitlab rake task..."
 
-  if [ "$1" == "gitlab:backup:restore" ]; then
-    # check if the BACKUP argument is specified
-    for a in $@
-    do
-      if [[ $a == BACKUP=* ]]; then
-        timestamp=${a:7}
-        break
-      fi
-    done
-
-    if [ -z ${timestamp} ]; then
-      # user needs to select the backup to restore
-      nBackups=$(ls ${GITLAB_BACKUP_DIR}/*_gitlab_backup.tar | wc -l)
-      if [ $nBackups -eq 0 ]; then
-        echo "No backup present. Cannot continue restore process.".
-        return 1
-      fi
-
-      for b in `ls ${GITLAB_BACKUP_DIR} | sort -r`
-      do
-        echo " ├ $b"
-      done
-      read -p "Select a backup to restore: " file
-
-      if [ ! -f "${GITLAB_BACKUP_DIR}/${file}" ]; then
-        echo "Specified backup does not exist. Aborting..."
-        return 1
-      fi
-      timestamp=$(echo $file | cut -d'_' -f1)
-    fi
-    sudo -u git -H bundle exec rake gitlab:backup:restore BACKUP=$timestamp RAILS_ENV=production
-  else
-    [ "$1" == "gitlab:import:repos" ] && appSanitize
-    sudo -u git -H bundle exec rake $@ RAILS_ENV=production
-  fi
+  [ "$1" == "gitlab:import:repos" ] && appSanitize
+  sudo -u git -H bundle exec rake "$@" RAILS_ENV=production
 }
 
 appHelp () {
@@ -899,7 +829,6 @@ appHelp () {
   echo " start:unicorn      - Starts the unicorn server"
   echo " start:sidekiq      - Starts the sidekiq workers"
   echo " start:nginx        - Starts the nginx server"
-  echo " start:cron         - Starts the cron scheduler"
   echo " app:shell          - Runs gitlab-shell"
   echo " app:sanitize       - Fix repository/satellites directory permissions."
   echo " app:rake <task>    - Execute a rake task."
@@ -919,9 +848,6 @@ case "$1" in
     ;;
   start:nginx)
     appStartNginx
-    ;;
-  start:cron)
-    appStartCron
     ;;
   app:shell)
     shift 1

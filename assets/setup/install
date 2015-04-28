@@ -86,55 +86,12 @@ sudo -u git -H bundle exec rake gitlab:shell:install[v${GITLAB_SHELL_VERSION}] R
 # make sure everything in /home/git is owned by the git user
 chown -R git:git /home/git/
 
-# install gitlab bootscript
-cp lib/support/init.d/gitlab /etc/init.d/gitlab
-chmod +x /etc/init.d/gitlab
-
-# disable default nginx configuration and enable gitlab's nginx configuration
+# disable default nginx configuration
 rm -f /etc/nginx/sites-enabled/default
 
-# move nginx logs to ${GITLAB_LOG_DIR}/nginx
-sed 's|access_log /var/log/nginx/access.log;|access_log '"${GITLAB_LOG_DIR}"'/nginx/access.log;|' -i /etc/nginx/nginx.conf
-sed 's|error_log /var/log/nginx/error.log;|error_log '"${GITLAB_LOG_DIR}"'/nginx/error.log;|' -i /etc/nginx/nginx.conf
-
-# configure gitlab log rotation
-cat > /etc/logrotate.d/gitlab <<EOF
-${GITLAB_LOG_DIR}/gitlab/*.log {
-  weekly
-  missingok
-  rotate 52
-  compress
-  delaycompress
-  notifempty
-  copytruncate
-}
-EOF
-
-# configure gitlab-shell log rotation
-cat > /etc/logrotate.d/gitlab-shell <<EOF
-${GITLAB_LOG_DIR}/gitlab-shell/*.log {
-  weekly
-  missingok
-  rotate 52
-  compress
-  delaycompress
-  notifempty
-  copytruncate
-}
-EOF
-
-# configure gitlab vhost log rotation
-cat > /etc/logrotate.d/gitlab-nginx <<EOF
-${GITLAB_LOG_DIR}/nginx/*.log {
-  weekly
-  missingok
-  rotate 52
-  compress
-  delaycompress
-  notifempty
-  copytruncate
-}
-EOF
+# make nginx output to stdout/stderr
+sed 's|access_log /var/log/nginx/access.log;|access_log /proc/self/fd/1;|' -i /etc/nginx/nginx.conf
+sed 's|error_log /var/log/nginx/error.log;|error_log /proc/self/fd/2;|' -i /etc/nginx/nginx.conf
 
 # purge build dependencies
 apt-get purge -y --auto-remove gcc g++ make patch pkg-config cmake \
